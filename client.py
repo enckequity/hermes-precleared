@@ -19,8 +19,6 @@ from typing import Any, Callable
 BASE_URL = "https://precleared.dev"
 CHECK_URL = f"{BASE_URL}/api/v1/check"
 RECEIPT_URL = f"{BASE_URL}/api/v1/receipt"
-GET_KEY_URL = f"{BASE_URL}/get-key"
-BUY_URL = f"{BASE_URL}/buy"
 RECEIPT_PAGE_URL = f"{BASE_URL}/r/"
 USER_AGENT = "hermes-precleared/0.1.0 (+https://github.com/gabrielaoimevbore-beep/hermes-precleared)"
 
@@ -35,6 +33,7 @@ VERDICTS = ("ok_to_email", "consent_needed", "blocked", "unknown")
 DEFINITE_VERDICTS = ("ok_to_email", "consent_needed", "blocked")
 ADDRESS_SOURCES = ("published", "bought", "scraped", "given", "unknown")
 SENDER_COUNTRIES = ("GB", "US")
+API_KEY_SECRET = "PRECLEARED_API_KEY"
 RECEIPT_ID_RE = re.compile(r"^cc_rcpt_[0-9A-Z]{16}$")
 COUNTRY_RE = re.compile(r"^[A-Za-z]{2}$")
 ADDRESS_RE = re.compile(r"[^\s<>@,;:\"']+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
@@ -121,9 +120,9 @@ def call(
             raw = b""
         return ApiResult(err.code, _parse(raw))
     except (TimeoutError, socket.timeout):
-        return ApiResult(None, None, "Precleared did not answer in time. Try again in a minute.")
+        return ApiResult(None, None, "Precleared did not answer in time, so nothing was checked. Try again in a minute.")
     except (urllib.error.URLError, OSError, ValueError):
-        return ApiResult(None, None, "Could not reach Precleared. Check the network connection and try again.")
+        return ApiResult(None, None, "Precleared could not be reached, so nothing was checked. Try again in a few minutes.")
 
 
 def _as_bool(value: Any) -> bool | None:
@@ -232,31 +231,27 @@ def error_message(result: ApiResult, api_key: str | None = None) -> str:
         return result.error
     body = result.body or {}
     api_message = clean_text(body.get("message")) or clean_text(body.get("error"))
-    # operator_message is written for the person running the agent (limit replies).
-    for_person = clean_text(body.get("operator_message"))
     status = result.status
     if status == 400:
         text = f"Precleared could not run this check: {api_message or 'the request was not valid.'}"
     elif status == 401:
         text = (
-            "Precleared rejected the API key (wrong or revoked). Get a free key at "
-            f"{GET_KEY_URL} and update PRECLEARED_API_KEY in the plugin settings."
+            "Precleared rejected the API key (wrong or revoked), so nothing was checked. The owner can "
+            f"replace this workspace's {API_KEY_SECRET} secret, or remove it to use the free allowance."
         )
+    # Out of allowance or rate-limited: a fixed, plain message. The API's own text and purchase
+    # links are not passed on, and the caller holds the email (fails closed).
     elif status == 402:
-        link = body.get("buy_url") if is_https_link(body.get("buy_url")) else BUY_URL
-        text = for_person or api_message or "Today's free checks on this key are used and it has no credits left."
-        if link not in text:
-            text += f" More checks: {link}"
+        text = "Precleared's checks for this key are used up for now, so nothing was checked. Try again tomorrow."
     elif status == 429 and body.get("error") == "rate_limited":
-        text = "Precleared is getting too many checks from this key at once."
+        text = "Precleared is getting too many checks at once, so nothing was checked."
         retry = body.get("retry_after")
         if isinstance(retry, (int, float)) and not isinstance(retry, bool) and 0 < retry <= 3600:
             text += f" Try again in {int(retry)} seconds."
+        else:
+            text += " Try again in a minute."
     elif status == 429:
-        link = body.get("get_key_url") if is_https_link(body.get("get_key_url")) else GET_KEY_URL
-        text = for_person or api_message or "Precleared's free daily allowance is used up for today."
-        if link not in text:
-            text += f" A free key gives you your own allowance: {link}"
+        text = "Precleared's free daily allowance is used up, so nothing was checked. Try again tomorrow."
     else:
         text = f"Precleared returned an unexpected answer (HTTP {status}). Try again shortly."
     return redact(text, api_key)

@@ -134,3 +134,60 @@ def test_engine_registers_two_tools_and_never_prompts(tmp_path):
     assert result["clear"] is None
     assert result["prompts"] == 0
     assert all(c["url"] == "https://precleared.dev/api/v1/check" for c in result["calls"])
+
+
+# -- 2. unreachable, slow or rate-limited: hold with a plain message, never pass -----------------------
+def _raise(exc):
+    def answer(body, request):
+        raise exc
+    return answer
+
+
+FAILURES = {
+    "down": (_raise(__import__("urllib.error").error.URLError("no route")), "could not be reached"),
+    "timeout": (_raise(__import__("socket").timeout("slow")), "did not answer in time"),
+    "daily_limit": (lambda b, r: (429, {"error": "daily_limit", "operator_message": "Buy https://precleared.dev/buy"}),
+                    "free daily allowance is used up"),
+    "rate_limited": (lambda b, r: (429, {"error": "rate_limited", "retry_after": 30}), "Try again in 30 seconds"),
+    "out_of_credits": (lambda b, r: (402, {"buy_url": "https://precleared.dev/buy?k=1"}), "used up for now"),
+    "server_error": (lambda b, r: (503, {}), "HTTP 503"),
+    "no_verdict": (lambda b, r: (200, {"hello": "world"}), "without a verdict"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(FAILURES))
+def test_api_failure_holds_the_send_with_a_plain_message(name):
+    answer, phrase = FAILURES[name]
+    hook, opener = _hook(FakeCtx({"sender_country": "US"}), answer)
+    result = hook(tool_name=SEND, args={"to": "lead@acme.com"})
+    assert result["action"] == "block", name
+    assert "lead@acme.com: not checked." in result["message"] and phrase in result["message"]
+    assert "The email was not sent." in result["message"]
+    assert "precleared.dev/buy" not in result["message"] and "get-key" not in result["message"]
+    assert len(opener.requests) == 1
+
+
+def test_a_failed_check_is_not_cached_so_it_holds_again():
+    ctx = FakeCtx({"sender_country": "GB"})
+    hook, opener = _hook(ctx, FAILURES["down"][0])
+    for _ in range(2):
+        assert hook(tool_name=SEND, args={"to": "lead@acme.co.uk"})["action"] == "block"
+    assert len(opener.requests) == 2
+
+
+def test_checks_past_the_deadline_hold():
+    def slow(body, request):
+        __import__("time").sleep(0.5)
+        return 200, {"verdict": "ok_to_email"}
+    ctx = FakeCtx({"sender_country": "GB"})
+    outcomes = hooks.run_checks(["a@acme.co.uk"], settings.read_settings(ctx), None,
+                                opener=FakeOpener(slow), deadline=0.05)
+    assert not outcomes["a@acme.co.uk"].cleared and "in time" in outcomes["a@acme.co.uk"].error
+
+
+@pytest.mark.parametrize("mode,phrase", [("down", "could not be reached"), ("limited", "free daily allowance")])
+def test_engine_holds_when_the_api_is_down_or_limited(tmp_path, mode, phrase):
+    result = _engine(tmp_path, mode)
+    for out in (result["held"], result["clear"]):
+        assert out and phrase in out and "The email was not sent." in out
+    assert result["prompts"] == 0

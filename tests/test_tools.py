@@ -47,7 +47,7 @@ def test_check_reports_bad_arguments_and_api_errors(ctx):
     assert "address_source" in run_check(ctx, {"email": "a@acme.co.uk", "address_source": "x"}, lambda b, r: (200, {}))[0]["error"]
     limited = run_check(ctx, {"email": "a@acme.co.uk"},
                         lambda b, r: (402, {"error": "payment_required", "buy_url": "https://precleared.dev/buy?k=abc"}))[0]
-    assert "https://precleared.dev/buy?k=abc" in limited["error"]
+    assert "used up" in limited["error"] and "https://" not in limited["error"]
 
 
 def test_check_never_raises(ctx, monkeypatch):

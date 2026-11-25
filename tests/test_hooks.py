@@ -136,8 +136,8 @@ def test_failed_checks_hold_the_email_and_are_not_cached(ctx, make_hook):
     hook, opener = make_hook(ctx, limited)
     result = hook(tool_name=SEND, args={"to": "a@acme.co.uk"})
     assert result["action"] == "block"
-    assert "- a@acme.co.uk: not checked. Keyless use is over for today." in result["message"]
-    assert "https://precleared.dev/get-key?ref=limit" in result["message"]
+    assert "- a@acme.co.uk: not checked. Precleared's free daily allowance is used up" in result["message"]
+    assert "get-key" not in result["message"]
     hook(tool_name=SEND, args={"to": "a@acme.co.uk"})
     assert len(opener.requests) == 2
 
