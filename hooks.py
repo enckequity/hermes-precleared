@@ -2,22 +2,21 @@
 
 For each tool call that sends email (see gate.py), every recipient is
 checked once (verdicts are cached for 30 days). If all of them come back
-ok_to_email the send goes ahead untouched. Otherwise, depending on the mode
-setting:
+ok_to_email the hook returns nothing, so the engine's own approval card for the
+send is the only prompt. Otherwise, depending on the mode setting:
 
-- ask (default): the call goes to Hermes's own approval prompt with the
-  verdicts, so a person decides. Unattended runs (cron, gateway without a
-  person) fail closed unless the user configured Hermes otherwise.
-- block: the call is refused and the agent is told why.
+- block (default; upstream's "ask" reads as block): the call is refused and
+  the agent is told why. The plugin never asks for approval itself, so a
+  person is never shown a second prompt on top of the approval card.
 - off: no checks.
 
-The hook never approves anything itself, and every check finishes inside
-Hermes's default 30-second hook budget.
+A recipient that could not be checked (precleared.dev unreachable, slow,
+rate-limited or out of allowance, or no sender country set) is held too.
+Every check finishes inside the engine's default 30-second hook budget.
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -31,21 +30,18 @@ from .settings import SET_COMMAND, Settings, read_api_key, read_settings
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 24.0  # per check; Precleared itself answers within 25 s
-DEADLINE = 26.0  # for all the checks in one send, inside Hermes's 30 s hook timeout
+DEADLINE = 26.0  # for all the checks in one send, inside the engine's 30 s hook timeout
 WORKERS = 5
 MAX_CHECKS_PER_SEND = 10
 MAX_LINES = 5
 MAX_MESSAGE = 1800
 TOO_MANY = "too_many"
 
-ASK_TAIL = (
-    "If this isn't a cold or marketing email (for example a reply, a message to an existing "
-    "customer, or a receipt), it can be allowed."
-)
 BLOCK_TAIL = (
-    "The email was not sent. Don't send cold or marketing email to these addresses: tell the "
-    "user and follow the next step above. If it isn't a cold or marketing email, the user can "
-    "switch the Precleared plugin's mode to ask and approve it."
+    "The email was not sent. Don't send cold or marketing email to these addresses, and don't "
+    "try another tool or another way of sending it: tell the user and follow the next step above. "
+    "If it isn't a cold or marketing email (a reply, an existing customer, a receipt), the user "
+    "can add the recipient's domain to the precleared plugin's ignore_domains setting."
 )
 
 
@@ -168,26 +164,11 @@ def held_message(held: list[Outcome], total: int, detection: gate.Detection) -> 
     return "\n".join(lines)
 
 
-def _digest(items: list[str]) -> str:
-    return hashlib.sha256("\n".join(sorted(set(items))).encode("utf-8")).hexdigest()[:20]
-
-
-def rule_key_for(held: list[Outcome]) -> str:
-    """The [a]lways-approve scope: these recipients with these verdicts, never the whole tool.
-
-    The addresses are hashed, so Hermes's saved approvals hold no addresses. A
-    different verdict later (say blocked, after an approval given while an
-    address couldn't be checked) asks again.
-    """
-    return "precleared:" + _digest([f"{o.email}={o.status}" for o in held])
-
-
-def directive(mode: str, message: str, rule_key: str) -> dict[str, str]:
+def directive(message: str) -> dict[str, str]:
+    """Hold the send. Always a block, never an approve: the plugin adds no prompt of its own."""
     if len(message) > MAX_MESSAGE:
         message = message[: MAX_MESSAGE - 3].rstrip() + "..."
-    if mode == "block":
-        return {"action": "block", "message": f"{message}\n{BLOCK_TAIL}"}
-    return {"action": "approve", "message": f"{message}\n{ASK_TAIL}", "rule_key": rule_key}
+    return {"action": "block", "message": f"{message}\n{BLOCK_TAIL}"}
 
 
 def make_pre_tool_call(
@@ -203,10 +184,8 @@ def make_pre_tool_call(
         if not settings.configured:
             who = recipients[0] if len(recipients) == 1 else f"{len(recipients)} recipients"
             return directive(
-                settings.mode,
                 f"Precleared can't check this email to {who}{_context(detection)} yet, because the "
                 f"country the business sends from isn't set. Set it with: {SET_COMMAND} (or US).",
-                "precleared:setup:" + _digest(recipients),
             )
         first_body, _ = check_body(settings, recipients[0])
         fp = cache_mod.fingerprint(first_body)
@@ -229,7 +208,7 @@ def make_pre_tool_call(
         held = [outcomes[email] for email in recipients if not outcomes[email].cleared]
         if not held:
             return None
-        return directive(settings.mode, held_message(held, len(recipients), detection), rule_key_for(held))
+        return directive(held_message(held, len(recipients), detection))
 
     def pre_tool_call(tool_name: str = "", args: Any = None, task_id: str = "", **kwargs: Any) -> dict[str, str] | None:
         try:
@@ -250,10 +229,8 @@ def make_pre_tool_call(
         except Exception:  # noqa: BLE001 - a bug after detection holds the email instead of sending it
             logger.exception("precleared: the check for a %s call failed", tool_name)
             return directive(
-                settings.mode,
                 f"Precleared couldn't check this email{_context(detection)} because of an unexpected "
                 "error in the plugin.",
-                "precleared:error:" + _digest(recipients),
             )
 
     return pre_tool_call

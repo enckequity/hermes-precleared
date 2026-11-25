@@ -15,17 +15,17 @@ def test_cleared_recipients_go_ahead_untouched(ctx, make_hook):
     assert body["pitch"] == "bookkeeping software" and body["existing_customer"] is False
 
 
-def test_held_recipient_goes_to_the_approval_prompt(ctx, make_hook):
+def test_held_recipient_is_blocked_with_the_verdict(ctx, make_hook):
     hook, _ = make_hook(ctx, by_email({"jane@acme.co.uk": "consent_needed"}))
     result = hook(tool_name=SEND, args={"to": "jane@acme.co.uk", "subject": "Hi"}, task_id="t1")
-    assert result["action"] == "approve"
-    assert result["rule_key"].startswith("precleared:") and "@" not in result["rule_key"]
+    assert result["action"] == "block"
+    assert "rule_key" not in result
     message = result["message"]
     assert message.startswith("Precleared hasn't cleared this email (via inkbox_send_email, subject \"Hi\").")
     assert "\n- jane@acme.co.uk: consent_needed." in message
     assert "needs prior consent (PECR 2003 regulation 22(2))." in message
     assert "https://precleared.dev/r/cc_rcpt_" in message
-    assert message.endswith(hooks.ASK_TAIL)
+    assert message.endswith(hooks.BLOCK_TAIL)
 
 
 def test_only_held_recipients_are_listed(ctx, make_hook):
@@ -34,12 +34,11 @@ def test_only_held_recipients_are_listed(ctx, make_hook):
     assert "1 of the 3 recipients" in result["message"]
     assert "- b@acme.co.uk: blocked." in result["message"]
     assert "a@acme.co.uk" not in result["message"]
-    assert result["rule_key"] == hooks.rule_key_for([hooks.Outcome("b@acme.co.uk", verdict="blocked")])
 
 
 def test_unknown_is_held(ctx, make_hook):
     hook, _ = make_hook(ctx, by_email({"u@acme.co.uk": "unknown"}))
-    assert hook(tool_name=SEND, args={"to": "u@acme.co.uk"})["action"] == "approve"
+    assert hook(tool_name=SEND, args={"to": "u@acme.co.uk"})["action"] == "block"
 
 
 def test_block_mode_refuses(make_hook):
@@ -62,16 +61,15 @@ def test_not_configured_asks_for_the_sender_country(make_hook):
     ctx = FakeCtx({})
     hook, opener = make_hook(ctx, by_email({}))
     result = hook(tool_name=SEND, args={"to": "x@acme.co.uk"})
-    assert result["action"] == "approve" and result["rule_key"].startswith("precleared:setup:")
-    assert "@" not in result["rule_key"]
+    assert result["action"] == "block" and "rule_key" not in result
     assert "hermes config set plugins.entries.precleared.settings.sender_country GB" in result["message"]
     assert opener.requests == []
 
 
-def test_unknown_mode_falls_back_to_ask(make_hook):
+def test_unknown_mode_falls_back_to_block(make_hook):
     ctx = FakeCtx({"sender_country": "GB", "mode": "loud"})
     hook, _ = make_hook(ctx, by_email({"x@acme.co.uk": "blocked"}))
-    assert hook(tool_name=SEND, args={"to": "x@acme.co.uk"})["action"] == "approve"
+    assert hook(tool_name=SEND, args={"to": "x@acme.co.uk"})["action"] == "block"
 
 
 def test_other_tools_and_replies_are_left_alone(ctx, make_hook):
@@ -95,7 +93,7 @@ def test_terminal_sends_are_checked(ctx, make_hook):
     hook, opener = make_hook(ctx, by_email({"lead@acme.co.uk": "consent_needed"}))
     command = "cat << 'EOF' | himalaya template send\nFrom: me@mine.com\nTo: lead@acme.co.uk\nSubject: Hi\n\nHello\nEOF"
     result = hook(tool_name="terminal", args={"command": command})
-    assert result["action"] == "approve"
+    assert result["action"] == "block"
     assert [r["body"]["recipient_email"] for r in opener.requests] == ["lead@acme.co.uk"]
 
 
@@ -137,7 +135,7 @@ def test_failed_checks_hold_the_email_and_are_not_cached(ctx, make_hook):
 
     hook, opener = make_hook(ctx, limited)
     result = hook(tool_name=SEND, args={"to": "a@acme.co.uk"})
-    assert result["action"] == "approve"
+    assert result["action"] == "block"
     assert "- a@acme.co.uk: not checked. Keyless use is over for today." in result["message"]
     assert "https://precleared.dev/get-key?ref=limit" in result["message"]
     hook(tool_name=SEND, args={"to": "a@acme.co.uk"})
@@ -162,7 +160,7 @@ def test_too_many_new_recipients_are_not_all_checked(ctx, make_hook):
     recipients = [f"p{i}@acme.co.uk" for i in range(13)]
     result = hook(tool_name=SEND, args={"to": recipients})
     assert len(opener.requests) == hooks.MAX_CHECKS_PER_SEND
-    assert result["action"] == "approve"
+    assert result["action"] == "block"
     assert "3 of the 13 recipients" in result["message"]
     assert result["message"].count("smaller batches") == 1
     assert "p10@acme.co.uk, p11@acme.co.uk, p12@acme.co.uk" in result["message"]
@@ -181,7 +179,7 @@ def test_slow_checks_are_cut_off_at_the_deadline(ctx, make_hook, monkeypatch):
     result = hook(tool_name=SEND, args={"to": "a@acme.co.uk"})
     release.set()
     assert time.monotonic() - started < 3
-    assert result["action"] == "approve"
+    assert result["action"] == "block"
     assert "did not answer in time" in result["message"]
 
 
@@ -201,7 +199,7 @@ def test_a_crash_while_checking_holds_the_email(ctx, make_hook, monkeypatch):
     monkeypatch.setattr(hooks, "run_checks", boom)
     hook, _ = make_hook(ctx, by_email({}))
     result = hook(tool_name=SEND, args={"to": "a@acme.co.uk"})
-    assert result["action"] == "approve"
+    assert result["action"] == "block"
     assert "unexpected error" in result["message"]
 
 
@@ -224,16 +222,8 @@ def test_messages_are_bounded(ctx, make_hook):
     result = hook(tool_name=SEND, args={"to": [f"p{i}@acme.co.uk" for i in range(10)]})
     assert "any of the 10 recipients" in result["message"]
     assert "- And 5 more." in result["message"]
-    assert len(result["message"]) <= hooks.MAX_MESSAGE + len(hooks.ASK_TAIL) + 1
+    assert len(result["message"]) <= hooks.MAX_MESSAGE + len(hooks.BLOCK_TAIL) + 1
 
-
-def test_rule_key_covers_exactly_the_held_recipients_and_verdicts():
-    O = hooks.Outcome
-    a, b, c = O("a@x.com", verdict="blocked"), O("b@x.com", verdict="consent_needed"), O("c@x.com", verdict="blocked")
-    assert hooks.rule_key_for([b, a]) == hooks.rule_key_for([a, b])
-    assert hooks.rule_key_for([a, b]) != hooks.rule_key_for([a, c])
-    assert hooks.rule_key_for([O("a@x.com", error="limit")]) != hooks.rule_key_for([a])
-    assert "@" not in hooks.rule_key_for([a])
 
 
 def test_mode_off_stored_as_yaml_false_is_off(make_hook):

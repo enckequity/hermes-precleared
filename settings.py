@@ -12,14 +12,16 @@ logger = logging.getLogger(__name__)
 
 PLUGIN_ID = "precleared"
 API_KEY_ENV = "PRECLEARED_API_KEY"
-MODES = ("ask", "block", "off")
+# "ask" was upstream's own approval prompt. The fork never adds a prompt of its own (the native
+# approval card is the only one), so a held email is always blocked; "ask" reads as "block".
+MODES = ("block", "off")
 SET_COMMAND = f"hermes config set plugins.entries.{PLUGIN_ID}.settings.sender_country GB"
 
 
 @dataclass
 class Settings:
     sender_country: str = ""
-    mode: str = "ask"
+    mode: str = "block"
     address_source: str = "unknown"
     prospect_country: str = ""
     pitch: str = ""
@@ -54,14 +56,16 @@ def read_settings(ctx: Any) -> Settings:
             logger.debug("precleared: could not read setting %s", key, exc_info=True)
             return default
 
-    raw_mode = get("mode", "ask")
-    # YAML reads a bare `off` as false (and `on` as true): `hermes config set ... mode off` stores false.
+    raw_mode = get("mode", "block")
+    # YAML reads a bare `off` as false (and `on` as true): a config value `mode: off` stores false.
     if isinstance(raw_mode, bool):
-        raw_mode = "ask" if raw_mode else "off"
-    mode = _text(raw_mode).lower() or "ask"
+        raw_mode = "block" if raw_mode else "off"
+    mode = _text(raw_mode).lower() or "block"
+    if mode == "ask":
+        mode = "block"
     if mode not in MODES:
-        logger.warning("precleared: unknown mode %r, using 'ask'", mode)
-        mode = "ask"
+        logger.warning("precleared: unknown mode %r, using 'block'", mode)
+        mode = "block"
     sender = _text(get("sender_country", "")).upper()
     if sender == "UK":
         sender = "GB"

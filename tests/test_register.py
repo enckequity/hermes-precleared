@@ -50,7 +50,7 @@ def test_manifest_fields():
         "label": data["config_schema"]["api_key"]["label"],
         "description": data["config_schema"]["api_key"]["description"],
     }
-    assert data["config_schema"]["mode"]["default"] == "ask"
+    assert data["config_schema"]["mode"]["default"] == "block"
     assert "requires_env" not in data  # the key is optional: no key means the free allowance
 
 

@@ -71,7 +71,7 @@ def test_a_check_with_other_facts_is_not_reused(ctx):
     run_check(ctx, {"email": "a@acme.co.uk", "existing_customer": True}, lambda b, r: (200, verdict_payload()))
     opener = FakeOpener(by_email({"a@acme.co.uk": "consent_needed"}))
     hook = hooks.make_pre_tool_call(ctx, opener=opener, api_key_reader=lambda: None)
-    assert hook(tool_name="inkbox_send_email", args={"to": "a@acme.co.uk"})["action"] == "approve"
+    assert hook(tool_name="inkbox_send_email", args={"to": "a@acme.co.uk"})["action"] == "block"
     assert len(opener.requests) == 1
 
 
