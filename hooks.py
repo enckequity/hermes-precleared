@@ -25,7 +25,7 @@ from typing import Any, Callable
 
 from . import cache as cache_mod
 from . import client, gate
-from .settings import SET_COMMAND, Settings, read_api_key, read_settings
+from .settings import SETUP_HINT, Settings, read_api_key, read_settings
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,7 @@ def make_pre_tool_call(
             who = recipients[0] if len(recipients) == 1 else f"{len(recipients)} recipients"
             return directive(
                 f"Precleared can't check this email to {who}{_context(detection)} yet, because the "
-                f"country the business sends from isn't set. Set it with: {SET_COMMAND} (or US).",
+                f"country the business sends from isn't set, so nothing was checked. {SETUP_HINT}",
             )
         first_body, _ = check_body(settings, recipients[0])
         fp = cache_mod.fingerprint(first_body)

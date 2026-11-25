@@ -62,7 +62,7 @@ def test_not_configured_asks_for_the_sender_country(make_hook):
     hook, opener = make_hook(ctx, by_email({}))
     result = hook(tool_name=SEND, args={"to": "x@acme.co.uk"})
     assert result["action"] == "block" and "rule_key" not in result
-    assert "hermes config set plugins.entries.precleared.settings.sender_country GB" in result["message"]
+    assert "plugins.entries.precleared.settings.sender_country to GB or US" in result["message"]
     assert opener.requests == []
 
 

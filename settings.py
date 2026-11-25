@@ -11,11 +11,17 @@ from . import client
 logger = logging.getLogger(__name__)
 
 PLUGIN_ID = "precleared"
-API_KEY_ENV = "PRECLEARED_API_KEY"
+API_KEY_ENV = client.API_KEY_SECRET  # a per-workspace secret, read only through get_secret
 # "ask" was upstream's own approval prompt. The fork never adds a prompt of its own (the native
 # approval card is the only one), so a held email is always blocked; "ask" reads as "block".
 MODES = ("block", "off")
-SET_COMMAND = f"hermes config set plugins.entries.{PLUGIN_ID}.settings.sender_country GB"
+# sender_country has no default: guessing the sender's country would pick the wrong law. Until the
+# owner sets it, every send to a new recipient is held and precleared_check refuses, with this hint.
+SET_COMMAND = f"plugins.entries.{PLUGIN_ID}.settings.sender_country"
+SETUP_HINT = (
+    f"The owner sets {SET_COMMAND} to GB or US (where the sending business is based) in the "
+    "workspace settings."
+)
 
 
 @dataclass
@@ -93,10 +99,14 @@ def read_settings(ctx: Any) -> Settings:
 
 
 def read_api_key() -> str | None:
-    """The user's Precleared key through Hermes's secret scope, or None (the free allowance)."""
+    """This workspace's Precleared key through the engine's per-workspace secret scope, or None.
+
+    Only agent.secret_scope.get_secret is used (never the process environment), so one workspace's
+    key is never sent for another. No key, or no scope, means the shared free allowance.
+    """
     try:
         from agent.secret_scope import get_secret
-    except ImportError:  # pragma: no cover - always present inside Hermes
+    except ImportError:  # pragma: no cover - always present inside the engine
         return None
     try:
         value = get_secret(API_KEY_ENV)

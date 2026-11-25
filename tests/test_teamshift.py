@@ -191,3 +191,86 @@ def test_engine_holds_when_the_api_is_down_or_limited(tmp_path, mode, phrase):
     for out in (result["held"], result["clear"]):
         assert out and phrase in out and "The email was not sent." in out
     assert result["prompts"] == 0
+
+
+# -- 3. API key: optional, only the per-workspace secret ---------------------------------------------
+def test_key_comes_only_from_the_secret_scope_under_its_own_name(monkeypatch):
+    scope = pytest.importorskip("agent.secret_scope")
+    asked = []
+    monkeypatch.setattr(scope, "get_secret", lambda name, default=None: asked.append(name) or " pc_ws_key ")
+    monkeypatch.setenv("PRECLEARED_API_KEY", "pc_shared_env_key")
+    assert settings.read_api_key() == "pc_ws_key" and asked == ["PRECLEARED_API_KEY"]
+    for path in ROOT.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "os.environ" not in text and "getenv" not in text, path.name
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_no_key_means_the_free_allowance(monkeypatch, value):
+    scope = pytest.importorskip("agent.secret_scope")
+    monkeypatch.setattr(scope, "get_secret", lambda name, default=None: value)
+    assert settings.read_api_key() is None
+
+
+def test_an_unscoped_secret_read_falls_back_to_no_key(monkeypatch):
+    scope = pytest.importorskip("agent.secret_scope")
+
+    def unscoped(name, default=None):
+        raise scope.UnscopedSecretError(name, "no scope")
+    monkeypatch.setattr(scope, "get_secret", unscoped)
+    assert settings.read_api_key() is None
+
+
+def test_key_is_sent_only_as_a_bearer_header_and_never_shown():
+    key = "pc_ws_secret"
+    hook, opener = _hook(FakeCtx({"sender_country": "GB"}), lambda b, r: (401, {"message": f"bad {key}"}), key=key)
+    result = hook(tool_name=SEND, args={"to": "lead@acme.co.uk"})
+    assert opener.requests[0]["headers"]["authorization"] == f"Bearer {key}"
+    assert key not in json.dumps(opener.requests[0]["body"]) and key not in result["message"]
+    assert result["action"] == "block" and "PRECLEARED_API_KEY" in result["message"]
+    hook, opener = _hook(FakeCtx({"sender_country": "GB"}), by_email({}))
+    hook(tool_name=SEND, args={"to": "lead@acme.co.uk"})
+    assert "authorization" not in opener.requests[0]["headers"]
+
+
+def test_engine_sends_the_workspace_key(tmp_path):
+    result = _engine(tmp_path)
+    assert result["calls"] and all(c["auth"] == "Bearer pc_ws_key" for c in result["calls"])
+
+
+# -- 4. sender_country: required, no guess; unset or unsupported holds with a clear message ------------
+@pytest.mark.parametrize("value", [None, "", "DE", "FR", "Britain", 44])
+def test_missing_or_unsupported_sender_country_holds_without_any_call(value):
+    values = {} if value is None else {"sender_country": value}
+    hook, opener = _hook(FakeCtx(values), by_email({}))
+    result = hook(tool_name=SEND, args={"to": "lead@acme.co.uk"})
+    assert result["action"] == "block"
+    assert "isn't set, so nothing was checked" in result["message"]
+    assert "plugins.entries.precleared.settings.sender_country to GB or US" in result["message"]
+    assert opener.requests == []
+
+
+def test_check_tool_refuses_without_sender_country():
+    from conftest import tools
+    opener = FakeOpener(by_email({}))
+    handler = tools.make_check_handler(FakeCtx({}), opener=opener, api_key_reader=lambda: None)
+    out = json.loads(handler({"email": "lead@acme.co.uk"}))
+    assert "GB or US" in out["error"] and opener.requests == []
+
+
+@pytest.mark.parametrize("value,expected", [("gb", "GB"), ("UK", "GB"), (" us ", "US")])
+def test_sender_country_is_normalised(value, expected):
+    assert settings.read_settings(FakeCtx({"sender_country": value})).sender_country == expected
+
+
+def test_manifest_keeps_sender_country_required_without_a_default():
+    import yaml
+    spec = yaml.safe_load((ROOT / "plugin.yaml").read_text())["config_schema"]["sender_country"]
+    assert spec["required"] is True and "default" not in spec and spec["choices"] == ["GB", "US"]
+
+
+def test_engine_holds_every_send_until_sender_country_is_set(tmp_path):
+    result = _engine(tmp_path, settings_yaml="")
+    assert result["calls"] == [] and result["prompts"] == 0
+    for out in (result["held"], result["clear"]):
+        assert out and "sender_country to GB or US" in out

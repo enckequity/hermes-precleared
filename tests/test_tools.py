@@ -39,7 +39,7 @@ def test_arguments_override_the_defaults(ctx):
 
 def test_check_needs_the_sender_country():
     result, opener = run_check(FakeCtx({}), {"email": "a@acme.co.uk"}, lambda b, r: (200, verdict_payload()))
-    assert "sender_country GB" in result["error"] and opener.requests == []
+    assert "sender_country to GB or US" in result["error"] and opener.requests == []
 
 
 def test_check_reports_bad_arguments_and_api_errors(ctx):
