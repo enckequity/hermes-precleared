@@ -20,10 +20,10 @@ BASE_URL = "https://precleared.dev"
 CHECK_URL = f"{BASE_URL}/api/v1/check"
 RECEIPT_URL = f"{BASE_URL}/api/v1/receipt"
 RECEIPT_PAGE_URL = f"{BASE_URL}/r/"
-USER_AGENT = "hermes-precleared/0.1.0 (+https://github.com/gabrielaoimevbore-beep/hermes-precleared)"
+USER_AGENT = "precleared-plugin/0.1.0"
 
 # Precleared answers within about 25 seconds even when a company register is slow.
-# The pre-send hook runs inside Hermes's 30-second hook budget, so it passes a
+# The pre-send hook runs inside the engine's 30-second hook budget, so it passes a
 # shorter timeout of its own.
 DEFAULT_TIMEOUT = 30.0
 

@@ -274,3 +274,75 @@ def test_engine_holds_every_send_until_sender_country_is_set(tmp_path):
     assert result["calls"] == [] and result["prompts"] == 0
     for out in (result["held"], result["clear"]):
         assert out and "sender_country to GB or US" in out
+
+
+# -- 5. user-facing text never names the engine -------------------------------------------------------
+def _user_strings(path):
+    import ast
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                docstrings.add(id(body[0].value))
+    return [n.value for n in ast.walk(tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docstrings]
+
+
+# gate.py recognises the engine's own `hermes send` command line; these patterns are not shown to anyone.
+MATCHERS = {"hermes", "himalaya|agentmail|swaks|hermes|curl|mail|mutt|msmtp", "(himalaya|agentmail|swaks|hermes|curl|"}
+
+
+@pytest.mark.parametrize("path", sorted(ROOT.glob("*.py")), ids=lambda p: p.name)
+def test_no_engine_name_in_runtime_strings(path):
+    bad = [s for s in _user_strings(path) if "hermes" in s.lower() and s not in MATCHERS]
+    assert not bad, bad
+
+
+def test_no_engine_name_in_manifest_or_skill_text():
+    import yaml
+    manifest = yaml.safe_load((ROOT / "plugin.yaml").read_text())
+    visible = [manifest["description"]]
+    for spec in manifest["config_schema"].values():
+        visible += [str(spec.get("label", "")), str(spec.get("description", ""))]
+    skill = (ROOT / "skills" / "cold-email-check" / "SKILL.md").read_text().split("---", 2)
+    visible += [skill[2], yaml.safe_load(skill[1])["description"]]
+    assert not [v for v in visible if "hermes" in v.lower()]
+    assert "the assistant" in manifest["description"]
+
+
+def test_engine_send_command_is_reported_without_the_engine_name():
+    hook, _ = _hook(FakeCtx({"sender_country": "GB"}), by_email({"lead@acme.co.uk": "blocked"}))
+    result = hook(tool_name="terminal", args={"command": 'hermes send --to email:lead@acme.co.uk "hi"'})
+    assert result["action"] == "block" and "via send command" in result["message"]
+    assert "hermes" not in result["message"].lower()
+
+
+def test_user_agent_is_neutral():
+    from conftest import client
+    assert "hermes" not in client.USER_AGENT.lower()
+
+
+def test_skill_does_not_push_a_key_signup_or_a_purchase():
+    text = (ROOT / "skills" / "cold-email-check" / "SKILL.md").read_text()
+    assert "get-key" not in text and "pricing" not in text and "Paid" not in text
+
+
+# -- 6. shipped surface: no telemetry, self-update, report-a-problem or CI ----------------------------
+def test_only_the_cold_email_skill_ships():
+    assert [p.parent.name for p in (ROOT / "skills").glob("*/SKILL.md")] == ["cold-email-check"]
+
+
+def test_runtime_talks_only_to_precleared_and_runs_nothing():
+    for path in ROOT.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for bad in ("subprocess", "os.system", "pip install", "telemetry", "posthog", "sentry", "self_update"):
+            assert bad not in text, (path.name, bad)
+    from conftest import client
+    assert client.BASE_URL == "https://precleared.dev"
+    assert not (ROOT / ".github").exists() and not (ROOT / "tests" / "test_live.py").exists()
+
+
+def test_engine_registers_the_one_skill(tmp_path):
+    assert _engine(tmp_path)["skills"] == ["precleared:cold-email-check"]

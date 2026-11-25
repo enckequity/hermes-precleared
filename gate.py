@@ -905,7 +905,7 @@ def terminal_detection(command: Any) -> Detection | None:
             if re.search(r"\bsend\b", seg_skel):
                 targets = [v for v in _flag_values(seg, seg_skel, ("--to", "-t")) if v.lower().startswith("email:")]
                 if targets:
-                    channels.append("hermes send")
+                    channels.append("send command")
                     for target in targets:
                         recipients += emails_in(target)
                     subjects += _flag_values(seg, seg_skel, ("--subject",))[:1]

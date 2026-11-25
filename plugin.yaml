@@ -2,13 +2,13 @@ name: precleared
 version: 0.1.0
 manifest_version: 2
 description: >-
-  Checks cold email against the law before it goes out. When the agent sends an
-  email with a send tool, one of Hermes's email skills or an email API call,
-  Precleared checks each new recipient against UK (PECR, UK GDPR), US (CAN-SPAM),
-  Canadian (CASL), German, French, Australian, Irish and Dutch rules. Anything not
-  cleared goes to Hermes's approval prompt (or is refused, in block mode) with the
-  rule, its source and a signed receipt. Also adds the precleared_check and
-  precleared_verify_receipt tools.
+  Checks cold email against the law before it goes out. When the assistant sends
+  an email with a send tool, an email skill or an email API call, Precleared
+  checks each new recipient against UK (PECR, UK GDPR), US (CAN-SPAM), Canadian
+  (CASL), German, French, Australian, Irish and Dutch rules. Anything not cleared
+  is held with the rule, its source and a signed receipt; it never adds an
+  approval prompt of its own. Recipient addresses and the pitch are sent to
+  precleared.dev. Also adds the precleared_check and precleared_verify_receipt tools.
 author: Precleared
 license: MIT
 homepage: https://github.com/gabrielaoimevbore-beep/hermes-precleared
@@ -62,4 +62,4 @@ config_schema:
     type: secret
     env: PRECLEARED_API_KEY
     label: Precleared API key (optional)
-    description: Without a key you get Precleared's free daily allowance. A free key from https://precleared.dev/get-key gives you your own.
+    description: A per-workspace secret. Without a key, checks use precleared.dev's free daily allowance, shared by everyone on the same network.

@@ -14,7 +14,7 @@ metadata:
 
 Before the first cold email to a new address, ask Precleared whether that email is allowed. Each check returns a verdict, the rule that decided it with its source, what the footer must include and a signed receipt. Nothing is sent to the recipient.
 
-This plugin also checks recipients on its own: when you send an email with a send tool, one of the email skills (himalaya, agentmail, Google Workspace) or an email API, an email to anyone Precleared hasn't cleared is held. It goes to the user for approval, or is refused if the plugin is set to block. Checking first with `precleared_check` is still better: you get the footer requirements and next step before you write the email, and the pre-send check reuses your answer instead of checking again.
+This plugin also checks recipients on its own: when you send an email with a send tool, one of the email skills (himalaya, agentmail, Google Workspace) or an email API, an email to anyone Precleared hasn't cleared is held: it is not sent, and you are told why. Checking first with `precleared_check` is still better: you get the footer requirements and next step before you write the email, and the pre-send check reuses your answer instead of checking again.
 
 ## When to check
 
@@ -41,7 +41,7 @@ The verdict depends on the facts. Take them from the user or the lead data, and 
 | `pitch_relevant` | `true` if the offer relates to the recipient's job or business, `false` if it doesn't. Leave it out if unsure. |
 | `existing_customer` | `true` if they have bought from the sender before. |
 
-The sending business's country (GB or US) comes from the plugin settings. If `precleared_check` says it isn't set, ask the user where their business is based and give them the command from the error to set it.
+The sending business's country (GB or US) comes from the plugin settings. If `precleared_check` says it isn't set, tell the user that the owner needs to set it (GB or US) before cold email can be checked or sent. Don't guess it.
 
 ## Act on the verdict
 
@@ -67,11 +67,9 @@ Save the receipt id with the lead, in a CRM note or a column of the sheet. The r
 
 ## Limits and keys
 
-- Without a key, Precleared gives a small free daily allowance, shared by everyone on the same network.
-- A free key from https://precleared.dev/get-key gives the user their own allowance. They add it as `PRECLEARED_API_KEY` in the plugin's settings. Never ask for the key in the chat and never write it into files or messages.
-- Paid packs add checks that don't expire: https://precleared.dev/#pricing
+- Without a key, Precleared gives a small free daily allowance, shared by everyone on the same network. A workspace key, if the owner has set one, is used automatically. Never ask for a key in the chat and never write one into files or messages.
 
-If a check says the allowance is used up or the key has no checks left, stop checking, tell the user how many addresses are left unchecked and pass on the link from the error. Don't try to get round the limit.
+If a check says the allowance is used up, Precleared can't be reached or it is busy, stop checking, tell the user how many addresses are left unchecked and that those emails are held until a check succeeds. Don't try to get round the limit or send without a check.
 
 ## Good to know
 

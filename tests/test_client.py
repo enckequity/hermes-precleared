@@ -44,7 +44,7 @@ def test_check_sends_json_with_user_agent_and_key():
     sent = opener.requests[0]
     assert sent["url"] == "https://precleared.dev/api/v1/check" and sent["method"] == "POST"
     assert sent["headers"]["authorization"] == "Bearer pc_live_secret"
-    assert sent["headers"]["user-agent"].startswith("hermes-precleared/")
+    assert sent["headers"]["user-agent"].startswith("precleared-plugin/")
     assert sent["headers"]["content-type"] == "application/json"
     assert sent["timeout"] == 7
     assert sent["body"]["recipient_email"] == "a@acme.co.uk"
