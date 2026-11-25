@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from . import cache as cache_mod
 from . import client
-from .settings import SET_COMMAND, read_api_key, read_settings
+from .settings import SETUP_HINT, read_api_key, read_settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +68,8 @@ def make_check_handler(
         if not settings.configured:
             return {
                 "error": (
-                    "Precleared needs the country the sending business is based in, GB or US. Ask "
-                    f"the user, then set it with: {SET_COMMAND} (or US). Precleared covers senders "
+                    "Precleared needs the country the sending business is based in, GB or US, and "
+                    f"it isn't set, so nothing was checked. {SETUP_HINT} Precleared covers senders "
                     "based in the UK or the US only."
                 )
             }

@@ -39,7 +39,7 @@ def test_arguments_override_the_defaults(ctx):
 
 def test_check_needs_the_sender_country():
     result, opener = run_check(FakeCtx({}), {"email": "a@acme.co.uk"}, lambda b, r: (200, verdict_payload()))
-    assert "sender_country GB" in result["error"] and opener.requests == []
+    assert "sender_country to GB or US" in result["error"] and opener.requests == []
 
 
 def test_check_reports_bad_arguments_and_api_errors(ctx):
@@ -47,7 +47,7 @@ def test_check_reports_bad_arguments_and_api_errors(ctx):
     assert "address_source" in run_check(ctx, {"email": "a@acme.co.uk", "address_source": "x"}, lambda b, r: (200, {}))[0]["error"]
     limited = run_check(ctx, {"email": "a@acme.co.uk"},
                         lambda b, r: (402, {"error": "payment_required", "buy_url": "https://precleared.dev/buy?k=abc"}))[0]
-    assert "https://precleared.dev/buy?k=abc" in limited["error"]
+    assert "used up" in limited["error"] and "https://" not in limited["error"]
 
 
 def test_check_never_raises(ctx, monkeypatch):
@@ -71,7 +71,7 @@ def test_a_check_with_other_facts_is_not_reused(ctx):
     run_check(ctx, {"email": "a@acme.co.uk", "existing_customer": True}, lambda b, r: (200, verdict_payload()))
     opener = FakeOpener(by_email({"a@acme.co.uk": "consent_needed"}))
     hook = hooks.make_pre_tool_call(ctx, opener=opener, api_key_reader=lambda: None)
-    assert hook(tool_name="inkbox_send_email", args={"to": "a@acme.co.uk"})["action"] == "approve"
+    assert hook(tool_name="inkbox_send_email", args={"to": "a@acme.co.uk"})["action"] == "block"
     assert len(opener.requests) == 1
 
 

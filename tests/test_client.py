@@ -44,7 +44,7 @@ def test_check_sends_json_with_user_agent_and_key():
     sent = opener.requests[0]
     assert sent["url"] == "https://precleared.dev/api/v1/check" and sent["method"] == "POST"
     assert sent["headers"]["authorization"] == "Bearer pc_live_secret"
-    assert sent["headers"]["user-agent"].startswith("hermes-precleared/")
+    assert sent["headers"]["user-agent"].startswith("precleared-plugin/")
     assert sent["headers"]["content-type"] == "application/json"
     assert sent["timeout"] == 7
     assert sent["body"]["recipient_email"] == "a@acme.co.uk"
@@ -68,21 +68,16 @@ def test_http_errors_come_back_as_results():
     result = client.check({"recipient_email": "a@acme.co.uk"}, None, opener=opener)
     assert result.status == 429
     message = client.error_message(result)
-    assert "Keyless use is over for today." in message
-    assert "https://precleared.dev/get-key?ref=limit" in message
+    assert "free daily allowance is used up" in message
+    assert "precleared.dev" not in message and "Keyless" not in message
 
 
-def test_operator_message_is_preferred_for_limits():
+def test_limit_messages_are_fixed_text_without_purchase_links():
     result = client.ApiResult(402, {"error": "payment_required", "message": "machine text",
                                     "operator_message": "Your free checks are used. Buy a pack: https://precleared.dev/buy?k=1",
                                     "buy_url": "https://precleared.dev/buy?k=1"})
     message = client.error_message(result)
-    assert message == "Your free checks are used. Buy a pack: https://precleared.dev/buy?k=1"
-
-
-def test_402_falls_back_to_buy_page_for_odd_links():
-    result = client.ApiResult(402, {"error": "payment_required", "buy_url": "javascript:alert(1)"})
-    assert client.BUY_URL in client.error_message(result)
+    assert "used up" in message and "https://" not in message and "Buy" not in message
 
 
 def test_rate_limited_says_when_to_retry():
@@ -106,7 +101,7 @@ def test_network_failures_are_plain_messages():
         raise urllib.error.URLError("no route")
 
     assert "in time" in client.check({}, None, opener=FakeOpener(timeout)).error
-    assert "Could not reach" in client.check({}, None, opener=FakeOpener(down)).error
+    assert "could not be reached" in client.check({}, None, opener=FakeOpener(down)).error
 
 
 def test_non_json_error_body_is_handled():
