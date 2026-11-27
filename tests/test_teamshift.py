@@ -346,3 +346,35 @@ def test_runtime_talks_only_to_precleared_and_runs_nothing():
 
 def test_engine_registers_the_one_skill(tmp_path):
     assert _engine(tmp_path)["skills"] == ["precleared:cold-email-check"]
+
+
+# -- 6. per-address override: one known contact, never their whole (freemail) domain --------------
+def test_ignore_addresses_skips_only_that_exact_address():
+    ctx = FakeCtx({"sender_country": "US", "ignore_addresses": ["Pat@Gmail.com", "not-an-address", 7]})
+    assert settings.read_settings(ctx).ignore_addresses == ["pat@gmail.com"]
+    hook, opener = _hook(ctx, by_email({"sam@gmail.com": "consent_needed"}))
+    assert hook(tool_name=SEND, args={"to": "pat@gmail.com"}) is None
+    assert opener.requests == []
+    result = hook(tool_name=SEND, args={"to": ["pat@gmail.com", "sam@gmail.com"]})
+    assert result["action"] == "block"
+    assert [r["body"]["recipient_email"] for r in opener.requests] == ["sam@gmail.com"]
+
+
+def test_block_text_suggests_the_address_never_a_domain():
+    assert "ignore_addresses" in hooks.BLOCK_TAIL
+    assert "ignore_domains" not in hooks.BLOCK_TAIL
+    assert "whole domain" in hooks.BLOCK_TAIL
+
+
+def test_manifest_points_at_the_fork_and_describes_ask_honestly():
+    import yaml
+
+    manifest = yaml.safe_load((ROOT / "plugin.yaml").read_text())
+    assert manifest["homepage"] == "https://github.com/enckequity/hermes-precleared"
+    assert "enckequity" in manifest["author"]
+    assert manifest["config_schema"]["ignore_addresses"]["type"] == "list"
+    mode = manifest["config_schema"]["mode"]
+    # The engine type-checks settings but does not enforce choices, so a saved "ask" reaches the plugin and reads as block.
+    assert "ask" not in mode["choices"] and settings.read_settings(FakeCtx({"mode": "ask"})).mode == "block"
+    assert settings.SENDER_COUNTRY_PATH == "plugins.entries.precleared.settings.sender_country"
+    assert not hasattr(settings, "SET_COMMAND")

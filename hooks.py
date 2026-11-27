@@ -41,7 +41,8 @@ BLOCK_TAIL = (
     "The email was not sent. Don't send cold or marketing email to these addresses, and don't "
     "try another tool or another way of sending it: tell the user and follow the next step above. "
     "If it isn't a cold or marketing email (a reply, an existing customer, a receipt), the user "
-    "can add the recipient's domain to the precleared plugin's ignore_domains setting."
+    "can add that exact address to the precleared plugin's ignore_addresses setting. Don't suggest "
+    "ignoring the recipient's whole domain."
 )
 
 
@@ -218,7 +219,7 @@ def make_pre_tool_call(
             detection = gate.detect(tool_name, args, settings.extra_tools)
             if detection is None or detection.reply:
                 return None
-            recipients = [e for e in detection.recipients if not gate.is_skipped_address(e, settings.ignore_domains)]
+            recipients = [e for e in detection.recipients if not gate.is_skipped_address(e, settings.ignore_domains, settings.ignore_addresses)]
         except Exception:  # noqa: BLE001 - a bug here must never hold up unrelated tools
             logger.exception("precleared: could not inspect a %s call; letting it through", tool_name)
             return None

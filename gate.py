@@ -100,12 +100,15 @@ def _domain_matches(domain: str, pattern: str) -> bool:
     return bool(pattern) and (domain == pattern or domain.endswith("." + pattern))
 
 
-def is_skipped_address(email: str, ignore_domains: Iterable[str] = ()) -> bool:
-    """True for test domains and for domains the user listed in ignore_domains."""
+def is_skipped_address(email: str, ignore_domains: Iterable[str] = (), ignore_addresses: Iterable[str] = ()) -> bool:
+    """True for test domains, domains the user listed in ignore_domains and exact addresses in ignore_addresses."""
     domain = domain_of(email)
     if not domain:
         return True
     if domain in RESERVED_DOMAINS or domain.endswith(RESERVED_SUFFIXES):
+        return True
+    address = email.strip().lower()
+    if any(isinstance(a, str) and a.strip().lower() == address for a in ignore_addresses):
         return True
     return any(_domain_matches(domain, p) for p in ignore_domains if isinstance(p, str))
 

@@ -21,7 +21,7 @@ The plugin never sends email, never approves anything itself, and never changes 
 - **`curl` calls to the send endpoints of common email APIs:** Resend, SendGrid, Postmark, Mailgun, Brevo, Mailjet, AgentMail, Microsoft Graph and Amazon SES.
 - **Any other tool you name** in the `extra_tools` setting.
 
-Replies in an existing thread aren't checked: a message with an `In-Reply-To` header, a send with a thread id, or himalaya's reply command. Tools whose names mark drafts, forwards, test sends or transactional mail (receipts, invoices, password resets) are skipped too. A transactional email sent another way, with himalaya or curl say, is checked like any other, and if it's held you can approve it. Addresses at your own domains (the `ignore_domains` setting) and test domains like `example.com` are never checked. In shell commands, text inside quotes, comments and files being written isn't mistaken for a send.
+Replies in an existing thread aren't checked: a message with an `In-Reply-To` header, a send with a thread id, or himalaya's reply command. Tools whose names mark drafts, forwards, test sends or transactional mail (receipts, invoices, password resets) are skipped too. A transactional email sent another way, with himalaya or curl say, is checked like any other; if it's held, add that address to `ignore_addresses`. Addresses at your own domains (the `ignore_domains` setting), exact addresses in `ignore_addresses` and test domains like `example.com` are never checked. In shell commands, text inside quotes, comments and files being written isn't mistaken for a send.
 
 What it can't see:
 
@@ -65,6 +65,7 @@ All under `plugins.entries.precleared.settings`:
 | `pitch` | (empty) | What your emails offer, in a few words. Used to judge relevance to the recipient's job. |
 | `prospect_country` | (empty) | Two-letter code, if all your prospects are in one country. Used only when the address, company records and website don't show it. |
 | `ignore_domains` | `[]` | Domains not to check, such as your own: `'["mycompany.com"]'`. Subdomains are included. |
+| `ignore_addresses` | `[]` | Exact addresses not to check, such as an existing customer on a freemail domain: `'["pat@gmail.com"]'`. Only that address, never its domain. |
 | `extra_tools` | `[]` | Other tools that send email, by name or pattern: `'["mcp__instantly__create_lead"]'`. |
 
 The API key is a secret stored by Hermes as `PRECLEARED_API_KEY`, never in `config.yaml`.
