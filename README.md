@@ -8,7 +8,7 @@ This plugin puts that check in front of your agent's email.
 
 ## What it adds
 
-- **A pre-send check.** When the agent sends an email (see [which sends it checks](#which-sends-it-checks)), the plugin checks each new recipient first. If every recipient comes back `ok_to_email`, the email goes out untouched. If not, the call goes to Hermes's own approval prompt with the verdict, the rule and the receipt, so you decide. In `block` mode it is refused instead.
+- **A pre-send check.** When the agent sends an email (see [which sends it checks](#which-sends-it-checks)), the plugin checks each new recipient first. If every recipient comes back `ok_to_email`, the email goes out untouched. If not, the call is held and the assistant is told the verdict, the rule and the receipt, so it can tell you. The plugin never adds an approval prompt of its own.
 - **Two tools.** `precleared_check` checks one address and returns the verdict, the footer requirements and the next step, so the agent can check before it writes. `precleared_verify_receipt` fetches a signed receipt to show a client or an auditor.
 - **A skill**, `precleared:cold-email-check`, that tells the agent when to check, which facts to pass and what to do with each verdict.
 
@@ -60,7 +60,7 @@ All under `plugins.entries.precleared.settings`:
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `sender_country` | (none, required) | Where the sending business is based: `GB` or `US`. Until it's set, every email send stops and asks you to set it. |
-| `mode` | `ask` | `ask`: emails that aren't cleared go to Hermes's approval prompt. `block`: they're refused. `off`: no pre-send check (the tools still work). |
+| `mode` | `block` | `block`: emails that aren't cleared are held. `off`: no pre-send check (the tools still work). An older `ask` value already in `config.yaml` reads as `block`. |
 | `address_source` | `unknown` | Where your addresses come from: `published` (their website, a profile or a directory), `bought`, `scraped`, `given` or `unknown`. |
 | `pitch` | (empty) | What your emails offer, in a few words. Used to judge relevance to the recipient's job. |
 | `prospect_country` | (empty) | Two-letter code, if all your prospects are in one country. Used only when the address, company records and website don't show it. |
@@ -70,17 +70,9 @@ All under `plugins.entries.precleared.settings`:
 
 The API key is a secret stored by Hermes as `PRECLEARED_API_KEY`, never in `config.yaml`.
 
-### How `ask` works with Hermes's approvals
-
-`ask` uses Hermes's normal approval prompt, so Hermes's approval settings apply:
-
-- **Approving.** Approve once, for the session, or always. "Always" covers those exact recipients with those verdicts, never the whole tool, so if a verdict changes you're asked again.
-- **Unattended runs.** Cron jobs and messaging sessions with nobody to answer refuse the email, unless you've set `approvals.cron_mode` or `approvals.unattended_mode` to `approve`.
-- **Approvals switched off.** If approvals are off, or you run Hermes in YOLO mode, Hermes approves these prompts automatically. Use `mode: block` if you want a hard stop.
-
 ## Cost
 
-Checks use your Precleared allowance. Without a key you get 10 checks a day, shared by everyone on the same network. A free key gives you 25 a day of your own. Packs of checks that don't expire are on [precleared.dev](https://precleared.dev/#pricing). Each address is checked once and the answer is reused for 30 days, so a follow-up email to the same person doesn't use another check (an `unknown` answer is asked again next time). When the allowance runs out, emails to unchecked addresses are held (sent to the approval prompt, or refused in `block` mode) with a link to get a key.
+Checks use your Precleared allowance. Without a key you get 10 checks a day, shared by everyone on the same network. A free key gives you 25 a day of your own. Packs of checks that don't expire are on [precleared.dev](https://precleared.dev/#pricing). Each address is checked once and the answer is reused for 30 days, so a follow-up email to the same person doesn't use another check (an `unknown` answer is asked again next time). When the allowance runs out, or precleared.dev can't answer, emails to unchecked addresses are held with a plain message; the plugin never adds an approval prompt of its own.
 
 A check usually takes a second or two, and the plugin always finishes within 26 seconds, inside Hermes's 30-second limit for hooks. If you've lowered `plugins.hook_callback_timeout`, keep it at 30 or more.
 
@@ -90,7 +82,7 @@ What a user should know before installing:
 
 - **Network calls go to one host, `precleared.dev`, over HTTPS.** A check sends the recipient's email address, your sender country, the address source, your pitch and, if set, your prospects' country, plus any facts the agent passes to `precleared_check` (recipient country, company number, whether they're an existing customer, whether the pitch is relevant). `precleared_verify_receipt` sends a receipt id. Nothing else about you, your messages or the email's content is sent.
 - **Your API key**, if you add one, is read through Hermes's secret store and sent only in the `Authorization` header to `precleared.dev`. It never appears in messages, logs or files the plugin writes.
-- **A local cache** in Hermes's per-plugin data folder keeps each verdict for 30 days (at most 2,000 entries): a hash of the address, the verdict, a short reason and the receipt id. No addresses are stored in it, and approvals you save with "always" are kept by Hermes under a hash too.
+- **A local cache** in Hermes's per-plugin data folder keeps each verdict for 30 days (at most 2,000 entries): a hash of the address, the verdict, a short reason and the receipt id. No addresses are stored in it.
 - **No shell commands, no background processes, no telemetry.** The plugin reads the tool calls Hermes shows its hook, and nothing outside its own data folder.
 
 Precleared's privacy policy: [precleared.dev/privacy](https://precleared.dev/privacy).
