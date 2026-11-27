@@ -16,7 +16,7 @@ import textwrap
 
 import pytest
 
-from conftest import ROOT, FakeCtx, FakeOpener, by_email, hooks, settings
+from conftest import ROOT, FakeCtx, FakeOpener, by_email, gate, hooks, settings
 
 SEND = "inkbox_send_email"
 
@@ -374,7 +374,22 @@ def test_manifest_points_at_the_fork_and_describes_ask_honestly():
     assert "enckequity" in manifest["author"]
     assert manifest["config_schema"]["ignore_addresses"]["type"] == "list"
     mode = manifest["config_schema"]["mode"]
-    # The engine type-checks settings but does not enforce choices, so a saved "ask" reaches the plugin and reads as block.
+    # The engine's settings editor rejects a value outside choices, but an "ask" already in config.yaml (an older
+    # version, a hand edit) never passes through it, so the plugin reads it as block.
     assert "ask" not in mode["choices"] and settings.read_settings(FakeCtx({"mode": "ask"})).mode == "block"
     assert settings.SENDER_COUNTRY_PATH == "plugins.entries.precleared.settings.sender_country"
     assert not hasattr(settings, "SET_COMMAND")
+
+
+def test_ignore_addresses_never_widens_to_a_domain():
+    ctx = FakeCtx({"sender_country": "US", "ignore_addresses": ["@gmail.com", "gmail.com", " *@gmail.com "]})
+    assert settings.read_settings(ctx).ignore_addresses == []
+    hook, opener = _hook(ctx, by_email({"sam@gmail.com": "consent_needed"}))
+    assert hook(tool_name=SEND, args={"to": "sam@gmail.com"})["action"] == "block"
+    assert [r["body"]["recipient_email"] for r in opener.requests] == ["sam@gmail.com"]
+    assert gate.is_skipped_address(" Pat@GMAIL.com ", (), ["pat@gmail.com"])
+
+
+def test_ignore_addresses_accepts_a_display_name_entry():
+    ctx = FakeCtx({"sender_country": "US", "ignore_addresses": "Pat Lee <Pat@Gmail.com>, pat@gmail.com"})
+    assert settings.read_settings(ctx).ignore_addresses == ["pat@gmail.com"]

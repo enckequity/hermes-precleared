@@ -52,7 +52,7 @@ config_schema:
     type: list
     default: []
     label: Domains not to check
-    description: Your own domains and others you email that aren't cold outreach, for example ["mycompany.com"]. Subdomains are included.
+    description: Your own domains and others you email that aren't cold outreach, for example ["mycompany.com"]. Subdomains are included. Never list a freemail domain such as gmail.com here (it turns the check off for everyone there); use ignore_addresses for one person.
   ignore_addresses:
     type: list
     default: []
