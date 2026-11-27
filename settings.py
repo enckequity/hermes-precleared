@@ -17,9 +17,9 @@ API_KEY_ENV = client.API_KEY_SECRET  # a per-workspace secret, read only through
 MODES = ("block", "off")
 # sender_country has no default: guessing the sender's country would pick the wrong law. Until the
 # owner sets it, every send to a new recipient is held and precleared_check refuses, with this hint.
-SET_COMMAND = f"plugins.entries.{PLUGIN_ID}.settings.sender_country"
+SENDER_COUNTRY_PATH = f"plugins.entries.{PLUGIN_ID}.settings.sender_country"
 SETUP_HINT = (
-    f"The owner sets {SET_COMMAND} to GB or US (where the sending business is based) in the "
+    f"The owner sets {SENDER_COUNTRY_PATH} to GB or US (where the sending business is based) in the "
     "workspace settings."
 )
 
@@ -32,6 +32,7 @@ class Settings:
     prospect_country: str = ""
     pitch: str = ""
     ignore_domains: list[str] = field(default_factory=list)
+    ignore_addresses: list[str] = field(default_factory=list)
     extra_tools: list[str] = field(default_factory=list)
 
     @property
@@ -94,6 +95,8 @@ def read_settings(ctx: Any) -> Settings:
         prospect_country=prospect,
         pitch=_text(get("pitch", ""))[:200],
         ignore_domains=_string_list(get("ignore_domains", [])),
+        # One person at a time (a known contact on a freemail domain), never their whole domain.
+        ignore_addresses=[a.lower() for a in _string_list(get("ignore_addresses", [])) if "@" in a],
         extra_tools=_string_list(get("extra_tools", [])),
     )
 

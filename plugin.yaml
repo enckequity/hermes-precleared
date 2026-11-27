@@ -9,9 +9,9 @@ description: >-
   is held with the rule, its source and a signed receipt; it never adds an
   approval prompt of its own. Recipient addresses and the pitch are sent to
   precleared.dev. Also adds the precleared_check and precleared_verify_receipt tools.
-author: Precleared
+author: enckequity (fork of Precleared)
 license: MIT
-homepage: https://github.com/gabrielaoimevbore-beep/hermes-precleared
+homepage: https://github.com/enckequity/hermes-precleared
 tags: [email, compliance, outbound, sales, gdpr, pecr, can-spam, casl]
 requires_hermes: ">=0.22.2"
 provides_tools:
@@ -31,7 +31,7 @@ config_schema:
     choices: [block, "off"]
     default: block
     label: When an email isn't cleared
-    description: block holds it and tells the assistant why (the plugin never adds an approval prompt of its own; ask is read as block), off turns the pre-send check off (the tools still work).
+    description: block holds it and tells the assistant why (the plugin never adds an approval prompt of its own; a saved ask from older versions is not offered here but still reads as block), off turns the pre-send check off (the tools still work).
   address_source:
     type: str
     choices: [published, bought, scraped, given, unknown]
@@ -53,6 +53,11 @@ config_schema:
     default: []
     label: Domains not to check
     description: Your own domains and others you email that aren't cold outreach, for example ["mycompany.com"]. Subdomains are included.
+  ignore_addresses:
+    type: list
+    default: []
+    label: Addresses not to check
+    description: Exact addresses you email that aren't cold outreach, such as an existing customer on a freemail domain, for example ["pat@gmail.com"]. Only that address, never its domain.
   extra_tools:
     type: list
     default: []
