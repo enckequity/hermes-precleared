@@ -64,7 +64,7 @@ All under `plugins.entries.precleared.settings`:
 | `address_source` | `unknown` | Where your addresses come from: `published` (their website, a profile or a directory), `bought`, `scraped`, `given` or `unknown`. |
 | `pitch` | (empty) | What your emails offer, in a few words. Used to judge relevance to the recipient's job. |
 | `prospect_country` | (empty) | Two-letter code, if all your prospects are in one country. Used only when the address, company records and website don't show it. |
-| `ignore_domains` | `[]` | Domains not to check, such as your own: `'["mycompany.com"]'`. Subdomains are included. |
+| `ignore_domains` | `[]` | Domains not to check, such as your own: `'["mycompany.com"]'`. Subdomains are included. Never list a freemail domain such as `gmail.com` (that turns the check off for everyone there); use `ignore_addresses` for one person. |
 | `ignore_addresses` | `[]` | Exact addresses not to check, such as an existing customer on a freemail domain: `'["pat@gmail.com"]'`. Only that address, never its domain. |
 | `extra_tools` | `[]` | Other tools that send email, by name or pattern: `'["mcp__instantly__create_lead"]'`. |
 

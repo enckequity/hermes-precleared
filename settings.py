@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import client
+from . import client, gate
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,8 @@ def read_settings(ctx: Any) -> Settings:
         pitch=_text(get("pitch", ""))[:200],
         ignore_domains=_string_list(get("ignore_domains", [])),
         # One person at a time (a known contact on a freemail domain), never their whole domain.
-        ignore_addresses=[a.lower() for a in _string_list(get("ignore_addresses", [])) if "@" in a],
+        # A display-name entry ("Pat <pat@gmail.com>") keeps its address; "@gmail.com" and the like are dropped.
+        ignore_addresses=gate.dedupe(e for a in _string_list(get("ignore_addresses", [])) for e in gate.emails_in(a)),
         extra_tools=_string_list(get("extra_tools", [])),
     )
 

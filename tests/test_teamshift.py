@@ -383,8 +383,13 @@ def test_manifest_points_at_the_fork_and_describes_ask_honestly():
 
 def test_ignore_addresses_never_widens_to_a_domain():
     ctx = FakeCtx({"sender_country": "US", "ignore_addresses": ["@gmail.com", "gmail.com", " *@gmail.com "]})
-    assert settings.read_settings(ctx).ignore_addresses == ["@gmail.com", "*@gmail.com"]
+    assert settings.read_settings(ctx).ignore_addresses == []
     hook, opener = _hook(ctx, by_email({"sam@gmail.com": "consent_needed"}))
     assert hook(tool_name=SEND, args={"to": "sam@gmail.com"})["action"] == "block"
     assert [r["body"]["recipient_email"] for r in opener.requests] == ["sam@gmail.com"]
     assert gate.is_skipped_address(" Pat@GMAIL.com ", (), ["pat@gmail.com"])
+
+
+def test_ignore_addresses_accepts_a_display_name_entry():
+    ctx = FakeCtx({"sender_country": "US", "ignore_addresses": "Pat Lee <Pat@Gmail.com>, pat@gmail.com"})
+    assert settings.read_settings(ctx).ignore_addresses == ["pat@gmail.com"]
